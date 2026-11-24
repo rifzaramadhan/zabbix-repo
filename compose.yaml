@@ -1,0 +1,54 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --log-bin-trust-function-creators=1
+    environment:
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-zabbix_proxy}"
+      MYSQL_USER: "${MYSQL_USER:-zabbix}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Isi MYSQL_PASSWORD di .env}"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:?Isi MYSQL_ROOT_PASSWORD di .env}"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - db_private
+
+  zabbix-proxy:
+    image: "${ZABBIX_PROXY_IMAGE:-zabbix/zabbix-proxy-mysql:alpine-8.0-latest}"
+    init: true
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DB_SERVER_HOST: mysql
+      MYSQL_DATABASE: "${MYSQL_DATABASE:-zabbix_proxy}"
+      MYSQL_USER: "${MYSQL_USER:-zabbix}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD:?Isi MYSQL_PASSWORD di .env}"
+      ZBX_PROXYMODE: "0"
+      ZBX_HOSTNAME: "${ZABBIX_PROXY_NAME:?Isi ZABBIX_PROXY_NAME di .env}"
+      ZBX_SERVER_HOST: "${ZABBIX_SERVER_HOST:?Isi ZABBIX_SERVER_HOST di .env}"
+    networks:
+      - db_private
+      - monitoring
+
+networks:
+  db_private:
+    driver: bridge
+    internal: true
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+  monitoring:
+    driver: bridge
+
+volumes:
+  mysql-data:
